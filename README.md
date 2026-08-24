@@ -1,0 +1,354 @@
+# Speaches on Ubuntu
+
+This repository is a native Ubuntu 24.04 LAN deployment kit for:
+
+- running [speaches-ai/speaches](https://github.com/speaches-ai/speaches)
+- checking its OpenAI-compatible STT endpoint
+- checking its OpenAI-compatible TTS endpoint
+- exposing an `OpenLingo`-style `/api/stt` route without deploying `OpenLingo` here
+- keeping a simple `faster-whisper` fallback if `Speaches` is inconvenient
+
+`OpenLingo` is assumed to be deployed elsewhere and to remain nearly vanilla except for its OpenAI call replacements. This repo only covers the external STT side.
+
+## What is included
+
+- [scripts/install-ubuntu24-native.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\install-ubuntu24-native.sh): native Ubuntu install helper for upstream `Speaches`
+- [systemd/speaches.service](C:\Users\iparshikov\projects\speaches-on-ubuntu\systemd\speaches.service): `systemd` unit for `Speaches`
+- [services/openlingo-stt-adapter/app.py](C:\Users\iparshikov\projects\speaches-on-ubuntu\services\openlingo-stt-adapter\app.py): thin `/api/stt -> /v1/audio/transcriptions` adapter
+- [services/openlingo-stt-adapter/run.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\services\openlingo-stt-adapter\run.sh): native runner for the adapter
+- [systemd/openlingo-stt-adapter.service](C:\Users\iparshikov\projects\speaches-on-ubuntu\systemd\openlingo-stt-adapter.service): `systemd` unit for the adapter
+- [services/faster-whisper-api/app.py](C:\Users\iparshikov\projects\speaches-on-ubuntu\services\faster-whisper-api\app.py): fallback STT API
+- [services/faster-whisper-api/run.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\services\faster-whisper-api\run.sh): native runner for the fallback
+- [systemd/faster-whisper-api.service](C:\Users\iparshikov\projects\speaches-on-ubuntu\systemd\faster-whisper-api.service): `systemd` unit for the fallback
+- [scripts/verify-speaches-stt.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\verify-speaches-stt.sh): direct STT verification
+- [scripts/curl-openlingo-stt.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\curl-openlingo-stt.sh): adapter verification
+- [scripts/verify-speaches-tts.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\verify-speaches-tts.sh): direct TTS verification
+- [scripts/benchmark-tts.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\benchmark-tts.sh): quick latency comparison for `Speaches` vs `Piper`
+- [nginx/app.conf.template](C:\Users\iparshikov\projects\speaches-on-ubuntu\nginx\app.conf.template): app reverse proxy template
+- [nginx/api.conf.template](C:\Users\iparshikov\projects\speaches-on-ubuntu\nginx\api.conf.template): API reverse proxy template
+- [scripts/render-nginx-config.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\render-nginx-config.sh): renders final `nginx` configs from `.env`
+
+## Recommended architecture
+
+Preferred path:
+
+1. Run `Speaches` on the Ubuntu LAN host.
+2. Point `OpenLingo` to `http://SERVER_IP:8000/v1` if it already supports an OpenAI-compatible base URL.
+
+Compatibility path:
+
+1. Run `Speaches` on the Ubuntu LAN host.
+2. Run the adapter from this repo on the same host.
+3. Point `OpenLingo` to `http://SERVER_IP:8010/api/stt` if it expects its own upload route.
+
+Only use the fallback `faster-whisper` service if `Speaches` proves awkward in practice.
+
+## Step 1. Prepare the Ubuntu 24.04 host
+
+Clone this repo onto the LAN server and create the local config:
+
+```bash
+git clone <this-repo> /opt/speaches-on-ubuntu
+cd /opt/speaches-on-ubuntu
+cp .env.example .env
+```
+
+Set the values you care about in [.env.example](C:\Users\iparshikov\projects\speaches-on-ubuntu\.env.example), especially:
+
+- `APP_PORT`
+- `NGINX_HTTP_PORT`
+- `NGINX_API_PORT`
+- `LAN_HOST`
+- `SPEACHES_MODEL`
+- `SPEACHES_TTS_MODEL`
+- `SPEACHES_TTS_VOICE`
+- `OPENLINGO_STT_ADAPTER_PORT`
+- `FASTER_WHISPER_PORT`
+
+Suggested shape when many ports are already occupied on the server:
+
+- app port: internal only, for example `APP_PORT=18000`
+- app entry via `nginx`: `NGINX_HTTP_PORT=18080`
+- API entry via `nginx`: `NGINX_API_PORT=18081`
+- `Speaches` internal listen: `SPEACHES_PORT=8000`
+- adapter internal listen: `OPENLINGO_STT_ADAPTER_PORT=8010`
+- fallback internal listen: `FASTER_WHISPER_PORT=8020`
+
+## Step 2. Install Speaches natively
+
+Install upstream `Speaches` into `/opt/speaches`:
+
+```bash
+cd /opt/speaches-on-ubuntu
+./scripts/install-ubuntu24-native.sh /opt/speaches
+```
+
+That script installs:
+
+- `python3`
+- `python3-venv`
+- `ffmpeg`
+- `git`
+- `uv`
+
+It then clones upstream `speaches-ai/speaches`, creates `.venv`, and runs `uv sync`.
+
+Manual start command:
+
+```bash
+cd /opt/speaches
+source .venv/bin/activate
+uvicorn --factory --host 0.0.0.0 --port 8000 speaches.main:create_app
+```
+
+## Step 3. Run Speaches under systemd
+
+Install the service:
+
+```bash
+sudo cp systemd/speaches.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now speaches
+sudo systemctl status speaches
+```
+
+Logs:
+
+```bash
+journalctl -u speaches -f
+```
+
+The endpoint should now be reachable on:
+
+```text
+http://SERVER_IP:8000
+```
+
+## Step 4. Verify the OpenAI-compatible STT endpoint
+
+Quick check:
+
+```bash
+./scripts/verify-speaches-stt.sh "http://SERVER_IP:8000" ./audio.wav
+```
+
+Equivalent raw request:
+
+```bash
+curl -s "http://SERVER_IP:8000/v1/audio/transcriptions" \
+  -F "file=@audio.wav" \
+  -F "model=Systran/faster-distil-whisper-small.en"
+```
+
+If your `OpenLingo` code uses an OpenAI SDK-style client, the desired target is:
+
+```bash
+OPENAI_BASE_URL=http://SERVER_IP:8000/v1
+OPENAI_API_KEY=not-empty
+```
+
+## Step 4a. Verify the OpenAI-compatible TTS endpoint
+
+`Speaches` also supports TTS. Quick check:
+
+```bash
+./scripts/verify-speaches-tts.sh "http://SERVER_IP:8000" ./speaches.wav
+```
+
+You can also choose text, model, and voice explicitly:
+
+```bash
+./scripts/verify-speaches-tts.sh \
+  "http://SERVER_IP:8000" \
+  ./speaches.wav \
+  "Hello from the LAN server" \
+  "speaches-ai/Kokoro-82M-v1.0-ONNX" \
+  "af_heart"
+```
+
+## Step 5. If needed, expose OpenLingo-style /api/stt
+
+If your `OpenLingo` branch expects `POST /api/stt` rather than an OpenAI base URL, use the adapter from this repo.
+
+Manual start:
+
+```bash
+cd /opt/speaches-on-ubuntu
+./services/openlingo-stt-adapter/run.sh
+```
+
+Systemd install:
+
+```bash
+sudo cp systemd/openlingo-stt-adapter.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now openlingo-stt-adapter
+sudo systemctl status openlingo-stt-adapter
+```
+
+Adapter endpoint:
+
+```text
+http://SERVER_IP:8010/api/stt
+```
+
+Adapter test:
+
+```bash
+./scripts/curl-openlingo-stt.sh "http://SERVER_IP:8010" ./audio.wav
+```
+
+Returned shape:
+
+```json
+{
+  "text": "transcribed text",
+  "provider": "speaches",
+  "model": "Systran/faster-distil-whisper-small.en",
+  "raw": {}
+}
+```
+
+## Step 6. Fallback: own faster-whisper API
+
+If `Speaches` turns out to be the wrong fit, run the fallback service instead.
+
+Manual start:
+
+```bash
+cd /opt/speaches-on-ubuntu
+./services/faster-whisper-api/run.sh
+```
+
+Systemd install:
+
+```bash
+sudo cp systemd/faster-whisper-api.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now faster-whisper-api
+sudo systemctl status faster-whisper-api
+```
+
+Fallback endpoint:
+
+```text
+POST http://SERVER_IP:8020/api/stt
+```
+
+This response includes `text`, `segments`, language, and duration.
+
+## Step 7. Put nginx in front with explicit ports
+
+If the server already has many occupied ports, keep the internal services on their own ports and expose only two entry points with `nginx`:
+
+- app entry: `NGINX_HTTP_PORT`
+- API entry: `NGINX_API_PORT`
+
+Render configs from `.env`:
+
+```bash
+sudo apt install -y gettext-base nginx
+cd /opt/speaches-on-ubuntu
+./scripts/render-nginx-config.sh
+```
+
+This creates:
+
+- `.generated-nginx/app.conf`
+- `.generated-nginx/api.conf`
+
+Install them:
+
+```bash
+sudo cp .generated-nginx/app.conf /etc/nginx/sites-available/openlingo-app.conf
+sudo cp .generated-nginx/api.conf /etc/nginx/sites-available/openlingo-api.conf
+sudo ln -sf /etc/nginx/sites-available/openlingo-app.conf /etc/nginx/sites-enabled/openlingo-app.conf
+sudo ln -sf /etc/nginx/sites-available/openlingo-api.conf /etc/nginx/sites-enabled/openlingo-api.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Routing shape:
+
+- `http://SERVER_IP:${NGINX_HTTP_PORT}/` -> your app on `APP_PORT`
+- `http://SERVER_IP:${NGINX_API_PORT}/v1/` -> `Speaches`
+- `http://SERVER_IP:${NGINX_API_PORT}/api/stt` -> adapter
+- `http://SERVER_IP:${NGINX_API_PORT}/api/fallback-stt` -> fallback `faster-whisper`
+
+This is convenient when `OpenLingo` should see only one external API port.
+
+## Step 8. Use Speaches as a second TTS engine
+
+Yes, `Speaches` can be used for TTS as well as STT. That makes it a good second option next to your existing `Piper` path.
+
+Practical split:
+
+1. Keep your current `Piper` implementation as the known-good baseline.
+2. Add `Speaches` TTS as variant 2.
+3. Prefer `Kokoro` inside `Speaches` for the second voice stack, because it gives you a meaningfully different engine rather than duplicating `Piper` twice.
+
+That gives you a two-way voice loop with interchangeable pieces:
+
+- STT: `Speaches` or fallback `faster-whisper`
+- TTS: existing `Piper` path or `Speaches` TTS
+
+## Step 9. Compare quality and speed of Speaches vs Piper
+
+For a quick latency check:
+
+1. Save one representative text sample to a file, for example `sample.txt`.
+2. Run:
+
+```bash
+./scripts/benchmark-tts.sh \
+  "http://SERVER_IP:8000" \
+  "http://SERVER_IP:5000/tts" \
+  ./sample.txt \
+  ./bench-out
+```
+
+This saves:
+
+- `bench-out/speaches.wav`
+- `bench-out/piper.wav`
+- `bench-out/results.csv`
+
+I would compare them on three axes:
+
+1. Time to first usable result.
+2. Total generation time for short and medium phrases.
+3. Subjective quality: naturalness, intelligibility, prosody, fatigue on long listening.
+
+For a fair test, use the same:
+
+- phrase set
+- host machine
+- CPU/GPU mode
+- output format
+- number of warmup runs
+
+Best lightweight methodology:
+
+1. Prepare 10 short UI phrases, 10 medium assistant phrases, and 3 long paragraphs.
+2. Run each engine once as warmup.
+3. Run each phrase 3 times and compare median `time_total`.
+4. Listen blind to paired outputs and score from 1 to 5 for naturalness and clarity.
+5. Keep separate notes for Russian and English if you use both.
+
+## LAN notes
+
+If Ubuntu firewall is enabled:
+
+```bash
+sudo ufw allow ${NGINX_HTTP_PORT}/tcp
+sudo ufw allow ${NGINX_API_PORT}/tcp
+sudo ufw allow 8000/tcp
+sudo ufw allow 8010/tcp
+sudo ufw allow 8020/tcp
+```
+
+If only `nginx` should be public, open the two `nginx` ports and keep `8000`, `8010`, and `8020` LAN-local or firewalled.
+
+## Docker
+
+`compose.yaml` and `compose.gpu.yaml` are still present as an optional backup path, but native Ubuntu deployment is now the primary route for this project.

@@ -1,0 +1,50 @@
+services:
+  speaches:
+    image: ${SPEACHES_IMAGE}
+    container_name: speaches
+    restart: unless-stopped
+    ports:
+      - "${SPEACHES_PORT}:8000"
+    volumes:
+      - hf-hub-cache:/home/ubuntu/.cache/huggingface/hub
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  openlingo-stt-adapter:
+    build:
+      context: ./services/openlingo-stt-adapter
+    container_name: openlingo-stt-adapter
+    restart: unless-stopped
+    depends_on:
+      speaches:
+        condition: service_healthy
+    environment:
+      PORT: 8000
+      SPEACHES_BASE_URL: ${SPEACHES_BASE_URL}
+      SPEACHES_MODEL: ${SPEACHES_MODEL}
+      OPENLINGO_RESPONSE_FORMAT: ${OPENLINGO_RESPONSE_FORMAT}
+    ports:
+      - "${OPENLINGO_STT_ADAPTER_PORT}:8000"
+
+  faster-whisper-api:
+    build:
+      context: ./services/faster-whisper-api
+    container_name: faster-whisper-api
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      WHISPER_MODEL: ${WHISPER_MODEL}
+      WHISPER_DEVICE: ${WHISPER_DEVICE}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE}
+    ports:
+      - "${FASTER_WHISPER_PORT}:8000"
+    profiles:
+      - fallback
+
+volumes:
+  hf-hub-cache:
