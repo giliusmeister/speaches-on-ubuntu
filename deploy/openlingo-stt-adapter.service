@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenLingo STT Adapter
+After=network.target speaches.service
+Wants=speaches.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/speaches-on-ubuntu
+EnvironmentFile=/opt/speaches-on-ubuntu/.env
+ExecStart=/opt/speaches-on-ubuntu/services/openlingo-stt-adapter/run.sh
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/speaches-on-ubuntu /tmp
+
+[Install]
+WantedBy=multi-user.target
