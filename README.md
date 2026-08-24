@@ -86,7 +86,6 @@ Install everything in the same style as `piper-on-ubuntu`:
 
 ```bash
 cd /opt/speaches-on-ubuntu
-chmod +x scripts/*.sh services/*/run.sh
 bash scripts/install_ubuntu.sh
 ```
 

@@ -15,6 +15,8 @@ fi
 
 sudo mkdir -p "$APP_DIR"
 sudo rsync -a --delete --exclude ".git" ./ "$APP_DIR/"
+sudo find "$APP_DIR/scripts" -maxdepth 1 -type f -name "*.sh" -exec chmod 755 {} \;
+sudo find "$APP_DIR/services" -mindepth 2 -maxdepth 2 -type f -name "run.sh" -exec chmod 755 {} \;
 
 if [[ ! -f "$APP_DIR/.env" ]]; then
   sudo cp "$APP_DIR/.env.example" "$APP_DIR/.env"
