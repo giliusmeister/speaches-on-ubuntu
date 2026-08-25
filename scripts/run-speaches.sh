@@ -13,5 +13,5 @@ fi
 exec "${SPEACHES_DIR}/.venv/bin/uvicorn" \
   --factory \
   --host "${SPEACHES_HOST:-0.0.0.0}" \
-  --port "${SPEACHES_PORT:-8000}" \
+  --port "${SPEACHES_PORT:-8101}" \
   speaches.main:create_app

@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.wav
+*.mp3
+*.m4a
+*.ogg

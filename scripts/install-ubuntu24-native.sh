@@ -29,4 +29,4 @@ uv sync
 echo
 echo "Speaches native install is prepared in: $SPEACHES_DIR"
 echo "Start manually with:"
-echo "  source .venv/bin/activate && uvicorn --factory --host 0.0.0.0 --port 8000 speaches.main:create_app"
+echo "  source .venv/bin/activate && uvicorn --factory --host 127.0.0.1 --port 8101 speaches.main:create_app"

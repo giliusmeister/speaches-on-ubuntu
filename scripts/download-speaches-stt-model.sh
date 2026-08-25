@@ -3,7 +3,7 @@ set -euo pipefail
 
 SPEACHES_DIR="${1:-/opt/speaches}"
 MODEL_ID="${2:-Systran/faster-distil-whisper-small.en}"
-BASE_URL="${3:-http://127.0.0.1:8000}"
+BASE_URL="${3:-http://127.0.0.1:8101}"
 
 cd "${SPEACHES_DIR}"
 source .venv/bin/activate

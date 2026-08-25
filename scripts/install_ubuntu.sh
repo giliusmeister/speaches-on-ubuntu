@@ -7,6 +7,7 @@ CONFIGURE_NGINX="${CONFIGURE_NGINX:-snippet}"
 
 sudo apt-get update
 sudo apt-get install -y python3 python3-venv ffmpeg curl git nginx gettext-base
+sudo mkdir -p /root/.cache/huggingface/hub
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -38,26 +39,26 @@ LAN_HOST_VALUE="$(sudo awk -F= '/^LAN_HOST=/{print $2}' "$APP_DIR/.env" | tail -
 
 sudo mkdir -p /etc/nginx/snippets
 sed \
-  -e "s/__SPEACHES_PORT__/${SPEACHES_PORT_VALUE:-8000}/g" \
-  -e "s/__ADAPTER_PORT__/${ADAPTER_PORT_VALUE:-8010}/g" \
-  -e "s/__FALLBACK_PORT__/${FALLBACK_PORT_VALUE:-8020}/g" \
+  -e "s/__SPEACHES_PORT__/${SPEACHES_PORT_VALUE:-8101}/g" \
+  -e "s/__ADAPTER_PORT__/${ADAPTER_PORT_VALUE:-8103}/g" \
+  -e "s/__FALLBACK_PORT__/${FALLBACK_PORT_VALUE:-8104}/g" \
   "$APP_DIR/deploy/nginx-speaches-api.locations.conf" \
   | sudo tee /etc/nginx/snippets/speaches-api.locations.conf >/dev/null
 
 if [[ "$CONFIGURE_NGINX" == "site" ]]; then
   sed \
-    -e "s/listen 18081;/listen ${NGINX_API_PORT_VALUE:-18081};/g" \
+    -e "s/listen 8102;/listen ${NGINX_API_PORT_VALUE:-8102};/g" \
     -e "s/server_name 192.168.11.11;/server_name ${LAN_HOST_VALUE:-192.168.11.11};/g" \
     "$APP_DIR/deploy/nginx-speaches-api.site.conf" \
     | sudo tee /etc/nginx/sites-available/speaches-api >/dev/null
   sudo ln -sf /etc/nginx/sites-available/speaches-api /etc/nginx/sites-enabled/speaches-api
   sudo nginx -t
   sudo systemctl reload nginx
-  echo "Ready through nginx: http://${LAN_HOST_VALUE:-192.168.11.11}:${NGINX_API_PORT_VALUE:-18081}/v1/audio/transcriptions"
+  echo "Ready through nginx: http://${LAN_HOST_VALUE:-192.168.11.11}:${NGINX_API_PORT_VALUE:-8102}/v1/audio/transcriptions"
 else
   echo "Nginx snippet installed: /etc/nginx/snippets/speaches-api.locations.conf"
   echo "Include it in an existing server block, then run: sudo nginx -t && sudo systemctl reload nginx"
 fi
 
-echo "Local Speaches ready: http://127.0.0.1:${SPEACHES_PORT_VALUE:-8000}/v1/audio/transcriptions"
-echo "Local adapter ready: http://127.0.0.1:${ADAPTER_PORT_VALUE:-8010}/api/stt"
+echo "Local Speaches ready: http://127.0.0.1:${SPEACHES_PORT_VALUE:-8101}/v1/audio/transcriptions"
+echo "Local adapter ready: http://127.0.0.1:${ADAPTER_PORT_VALUE:-8103}/api/stt"

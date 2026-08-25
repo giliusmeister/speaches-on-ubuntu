@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ $# -lt 4 ]]; then
   echo "Usage: $0 <speaches-base-url> <piper-url> <text-file> <output-dir>" >&2
-  echo "Assumes Piper endpoint accepts POST JSON with {text: ...} and returns WAV." >&2
+  echo "Assumes Piper endpoint is OpenAI-compatible /v1/audio/speech." >&2
   exit 1
 fi
 
@@ -41,7 +41,11 @@ curl --silent --show-error \
   --write-out "piper,%{time_total},%{size_download},${OUTPUT_DIR}/piper.wav\n" \
   --data @- <<EOF >> "${OUTPUT_DIR}/results.csv"
 {
-  "text": "$TEXT"
+  "model": "piper-auto",
+  "voice": "en",
+  "language": "en",
+  "input": "$TEXT",
+  "response_format": "wav"
 }
 EOF
 

@@ -42,9 +42,39 @@ Compatibility path:
 
 1. Run `Speaches` on the Ubuntu LAN host.
 2. Run the adapter from this repo on the same host.
-3. Point `OpenLingo` to `http://SERVER_IP:8010/api/stt` if it expects its own upload route.
+3. Point `OpenLingo` to `http://SERVER_IP:8102/api/stt` if it expects its own upload route.
 
 Only use the fallback `faster-whisper` service if `Speaches` proves awkward in practice.
+
+## Known Working LAN Profile
+
+This is the tested shape used alongside `piper-on-ubuntu`:
+
+```text
+Speaches internal:       http://127.0.0.1:8101
+Speaches nginx/API:      http://192.168.11.11:8102
+OpenLingo STT adapter:   http://127.0.0.1:8103
+Fallback faster-whisper: http://127.0.0.1:8104
+Piper TTS nginx:         http://192.168.11.11:8100
+```
+
+OpenLingo should only use the nginx-facing URLs:
+
+```env
+STT_PROVIDER=speaches
+STT_URL=http://192.168.11.11:8102/api/stt
+```
+
+or the OpenAI-compatible STT endpoint:
+
+```env
+STT_PROVIDER=openai-compatible
+STT_BASE_URL=http://192.168.11.11:8102/v1
+STT_API_KEY=not-empty
+STT_MODEL=Systran/faster-distil-whisper-small.en
+```
+
+Keep the internal ports on `127.0.0.1`; do not point OpenLingo at `127.0.0.1:8101` unless OpenLingo runs on the same host and namespace.
 
 ## Step 1. Prepare the Ubuntu 24.04 host
 
@@ -75,10 +105,26 @@ Suggested shape when many ports are already occupied on the server:
 
 - app port: internal only, for example `APP_PORT=18000`
 - app entry via `nginx`: `NGINX_HTTP_PORT=18080`
-- API entry via `nginx`: `NGINX_API_PORT=18081`
-- `Speaches` internal listen: `SPEACHES_PORT=8000`
-- adapter internal listen: `OPENLINGO_STT_ADAPTER_PORT=8010`
-- fallback internal listen: `FASTER_WHISPER_PORT=8020`
+- API entry via `nginx`: `NGINX_API_PORT=8102`
+- `Speaches` internal listen: `SPEACHES_PORT=8101`
+- adapter internal listen: `OPENLINGO_STT_ADAPTER_PORT=8103`
+- fallback internal listen: `FASTER_WHISPER_PORT=8104`
+
+Make sure the adapter base URL follows the real Speaches port:
+
+```env
+SPEACHES_BASE_URL=http://127.0.0.1:8101/v1
+```
+
+If you change `SPEACHES_PORT`, update `SPEACHES_BASE_URL` too.
+
+Because the provided `speaches.service` runs as root, Hugging Face models are cached under root's home. Create the cache directory before model downloads:
+
+```bash
+sudo mkdir -p /root/.cache/huggingface/hub
+```
+
+The installer does this automatically.
 
 ## Step 2. Install Speaches natively
 
@@ -125,33 +171,61 @@ journalctl -u speaches -f
 The local endpoint should now be reachable on:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8101
 ```
 
 Health check:
 
 ```bash
-./scripts/check-speaches-health.sh "http://127.0.0.1:8000"
+./scripts/check-speaches-health.sh "http://127.0.0.1:8101"
+curl -i "http://127.0.0.1:8102/health"
 ```
 
-## Step 4. Verify the OpenAI-compatible STT endpoint
+## Step 4. Download Models
+
+Speaches model download uses `POST /v1/models/{model_id}`. A bare `POST /v1/models` returns `404`.
+
+Download the TTS model:
+
+```bash
+curl -X POST "http://127.0.0.1:8101/v1/models/speaches-ai/Kokoro-82M-v1.0-ONNX"
+```
+
+Download the STT model:
+
+```bash
+curl -X POST "http://127.0.0.1:8101/v1/models/Systran/faster-distil-whisper-small.en"
+```
+
+You can also use the CLI:
+
+```bash
+cd /opt/speaches
+source .venv/bin/activate
+export SPEACHES_BASE_URL="http://127.0.0.1:8101"
+uvx speaches-cli model download speaches-ai/Kokoro-82M-v1.0-ONNX
+uvx speaches-cli model download Systran/faster-distil-whisper-small.en
+uvx speaches-cli model ls
+```
+
+## Step 5. Verify the OpenAI-compatible STT endpoint
 
 If you want to avoid first-request model download latency, predownload the STT model:
 
 ```bash
-./scripts/download-speaches-stt-model.sh /opt/speaches "Systran/faster-distil-whisper-small.en" "http://127.0.0.1:8000"
+./scripts/download-speaches-stt-model.sh /opt/speaches "Systran/faster-distil-whisper-small.en" "http://127.0.0.1:8101"
 ```
 
 Quick check:
 
 ```bash
-./scripts/verify-speaches-stt.sh "http://127.0.0.1:8000" ./audio.wav
+./scripts/verify-speaches-stt.sh "http://127.0.0.1:8102" ./audio.wav
 ```
 
 Equivalent raw request:
 
 ```bash
-curl -s "http://127.0.0.1:8000/v1/audio/transcriptions" \
+curl -s "http://127.0.0.1:8102/v1/audio/transcriptions" \
   -F "file=@audio.wav" \
   -F "model=Systran/faster-distil-whisper-small.en"
 ```
@@ -159,30 +233,43 @@ curl -s "http://127.0.0.1:8000/v1/audio/transcriptions" \
 If your `OpenLingo` code uses an OpenAI SDK-style client, the desired target is:
 
 ```bash
-OPENAI_BASE_URL=http://192.168.11.11:18081/v1
+OPENAI_BASE_URL=http://192.168.11.11:8102/v1
 OPENAI_API_KEY=not-empty
 ```
 
-## Step 4a. Verify the OpenAI-compatible TTS endpoint
+## Step 5a. Verify the OpenAI-compatible TTS endpoint
 
 `Speaches` also supports TTS. Quick check:
 
 ```bash
-./scripts/verify-speaches-tts.sh "http://SERVER_IP:8000" ./speaches.wav
+./scripts/verify-speaches-tts.sh "http://127.0.0.1:8102" /tmp/speaches.wav
 ```
 
 You can also choose text, model, and voice explicitly:
 
 ```bash
 ./scripts/verify-speaches-tts.sh \
-  "http://SERVER_IP:8000" \
-  ./speaches.wav \
+  "http://127.0.0.1:8102" \
+  /tmp/speaches.wav \
   "Hello from the LAN server" \
   "speaches-ai/Kokoro-82M-v1.0-ONNX" \
   "af_heart"
 ```
 
-## Step 5. If needed, expose OpenLingo-style /api/stt
+Verify that the result is real audio:
+
+```bash
+file /tmp/speaches.wav
+ls -lh /tmp/speaches.wav
+```
+
+Expected:
+
+```text
+RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, mono 24000 Hz
+```
+
+## Step 6. If needed, expose OpenLingo-style /api/stt
 
 If your `OpenLingo` branch expects `POST /api/stt` rather than an OpenAI base URL, use the adapter from this repo.
 
@@ -205,13 +292,14 @@ sudo systemctl status openlingo-stt-adapter
 Local adapter endpoint:
 
 ```text
-http://127.0.0.1:8010/api/stt
+http://127.0.0.1:8103/api/stt
 ```
 
 Adapter test:
 
 ```bash
-./scripts/curl-openlingo-stt.sh "http://127.0.0.1:8010" ./audio.wav
+./scripts/curl-openlingo-stt.sh "http://127.0.0.1:8103" ./audio.wav
+curl -s "http://127.0.0.1:8102/api/stt" -F "file=@/tmp/speaches.wav"
 ```
 
 Returned shape:
@@ -225,7 +313,7 @@ Returned shape:
 }
 ```
 
-## Step 6. Fallback: own faster-whisper API
+## Step 7. Fallback: own faster-whisper API
 
 If `Speaches` turns out to be the wrong fit, run the fallback service instead.
 
@@ -248,12 +336,12 @@ sudo systemctl status faster-whisper-api
 Fallback endpoint:
 
 ```text
-POST http://SERVER_IP:8020/api/stt
+POST http://SERVER_IP:8104/api/stt
 ```
 
 This response includes `text`, `segments`, language, and duration.
 
-## Step 7. Put nginx in front with explicit ports
+## Step 8. Put nginx in front with explicit ports
 
 If the server already has many occupied ports, keep the internal services on their own ports and expose only two entry points with `nginx`:
 
@@ -289,7 +377,7 @@ CONFIGURE_NGINX=site bash scripts/install_ubuntu.sh
 
 That creates a dedicated site on `NGINX_API_PORT`.
 
-## Step 8. Use Speaches as a second TTS engine
+## Step 9. Use Speaches as a second TTS engine
 
 Yes, `Speaches` can be used for TTS as well as STT. That makes it a good second option next to your existing `Piper` path.
 
@@ -304,7 +392,7 @@ That gives you a two-way voice loop with interchangeable pieces:
 - STT: `Speaches` or fallback `faster-whisper`
 - TTS: existing `Piper` path or `Speaches` TTS
 
-## Step 9. Compare quality and speed of Speaches vs Piper
+## Step 10. Compare quality and speed of Speaches vs Piper
 
 For a quick latency check:
 
@@ -313,8 +401,8 @@ For a quick latency check:
 
 ```bash
 ./scripts/benchmark-tts.sh \
-  "http://SERVER_IP:8000" \
-  "http://SERVER_IP:5000/tts" \
+  "http://SERVER_IP:8102" \
+  "http://SERVER_IP:8100/v1/audio/speech" \
   ./sample.txt \
   ./bench-out
 ```
@@ -354,12 +442,10 @@ If Ubuntu firewall is enabled:
 ```bash
 sudo ufw allow ${NGINX_HTTP_PORT}/tcp
 sudo ufw allow ${NGINX_API_PORT}/tcp
-sudo ufw allow 8000/tcp
-sudo ufw allow 8010/tcp
-sudo ufw allow 8020/tcp
+sudo ufw allow 8102/tcp
 ```
 
-If only `nginx` should be public, open `NGINX_API_PORT` and keep `8000`, `8010`, and `8020` LAN-local or firewalled.
+If only `nginx` should be public, open `NGINX_API_PORT` and keep `8101`, `8103`, and `8104` bound to `127.0.0.1` or firewalled.
 
 ## Docker
 
