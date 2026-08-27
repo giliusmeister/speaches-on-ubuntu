@@ -463,6 +463,14 @@ curl -X POST "http://127.0.0.1:8101/v1/models/Systran/faster-distil-whisper-smal
 ```
 
 Then use the OpenLingo speech diagnostics page and run `Prewarm speech models`. The first run may still be slow after a service restart, but repeated speaking exercises should avoid the large cold-start delay.
+
+Confirmed local result:
+
+- Speaches health and model download work on the LAN server.
+- `STT_MODEL_TTL=-1` keeps the model loaded after use; logs show `is idle, not unloading`.
+- The current CPU still transcribes short samples slowly, around 15-19 seconds for a 5-second sample in this lab setup.
+- Do not spend more time on software tuning for this bottleneck now. Revisit with a stronger CPU or GPU-backed host later.
+
 ## LAN notes
 
 If Ubuntu firewall is enabled:
