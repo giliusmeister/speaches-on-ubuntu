@@ -77,6 +77,35 @@ STT_MODEL=Systran/faster-distil-whisper-small.en
 
 Keep the internal ports on `127.0.0.1`; do not point OpenLingo at `127.0.0.1:8101` unless OpenLingo runs on the same host and namespace.
 
+## Second LAN Server: 192.168.11.21
+
+To mirror the working `.11` setup on a second server, keep the same internal ports and expose the same nginx API ports on the new LAN IP:
+
+- Piper TTS: `http://192.168.11.21:8100/v1/audio/speech`
+- Speaches STT/TTS API: `http://192.168.11.21:8102/v1`
+- Speaches internal: `127.0.0.1:8101`
+- OpenLingo STT adapter internal: `127.0.0.1:8103`
+- fallback faster-whisper internal: `127.0.0.1:8104`
+
+Install/update Speaches on the target host with:
+
+```bash
+git clone <this-repo> /opt/speaches-on-ubuntu
+cd /opt/speaches-on-ubuntu
+cp .env.example .env
+sed -i 's/^LAN_HOST=.*/LAN_HOST=192.168.11.21/' .env
+sed -i 's/^NGINX_API_PORT=.*/NGINX_API_PORT=8102/' .env
+CONFIGURE_NGINX=site bash scripts/install_ubuntu.sh
+```
+
+After install, verify:
+
+```bash
+curl -i "http://127.0.0.1:8101/health"
+curl -i "http://192.168.11.21:8102/health"
+curl -X POST "http://127.0.0.1:8101/v1/models/Systran/faster-distil-whisper-small.en"
+```
+
 ## Step 1. Prepare the Ubuntu 24.04 host
 
 Clone this repo onto the LAN server and create the local config:
