@@ -445,7 +445,7 @@ Recommended values in `/opt/speaches-on-ubuntu/.env`:
 STT_MODEL_TTL=-1
 VAD_MODEL_TTL=-1
 TTS_MODEL_TTL=300
-PRELOAD_MODELS=["Systran/faster-distil-whisper-small.en","Systran/faster-whisper-small"]
+PRELOAD_MODELS='["Systran/faster-distil-whisper-small.en","Systran/faster-whisper-small"]'
 ```
 
 Apply the change:
