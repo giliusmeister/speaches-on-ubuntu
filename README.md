@@ -26,6 +26,7 @@ This repository is a native Ubuntu 24.04 LAN deployment kit for:
 - [scripts/curl-openlingo-stt.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\curl-openlingo-stt.sh): adapter verification
 - [scripts/verify-speaches-tts.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\verify-speaches-tts.sh): direct TTS verification
 - [scripts/benchmark-tts.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\benchmark-tts.sh): quick latency comparison for `Speaches` vs `Piper`
+- [scripts/benchmark-tts-languages.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\benchmark-tts-languages.sh): multi-language TTS comparison for `Speaches` vs `Piper`
 - [deploy/nginx-speaches-api.locations.conf](C:\Users\iparshikov\projects\speaches-on-ubuntu\deploy\nginx-speaches-api.locations.conf): nginx snippet template for API routes
 - [deploy/nginx-speaches-api.site.conf](C:\Users\iparshikov\projects\speaches-on-ubuntu\deploy\nginx-speaches-api.site.conf): standalone nginx site template
 - [scripts/install_ubuntu.sh](C:\Users\iparshikov\projects\speaches-on-ubuntu\scripts\install_ubuntu.sh): one-step Ubuntu install matching the `piper` project style
@@ -394,7 +395,7 @@ That gives you a two-way voice loop with interchangeable pieces:
 
 ## Step 10. Compare quality and speed of Speaches vs Piper
 
-For a quick latency check:
+For a quick single-text latency check:
 
 1. Save one representative text sample to a file, for example `sample.txt`.
 2. Run:
@@ -410,8 +411,39 @@ For a quick latency check:
 This saves:
 
 - `bench-out/speaches.wav`
-- `bench-out/piper.wav`
+- `bench-out/piper.mp3`
 - `bench-out/results.csv`
+
+For the missing multi-language check, run:
+
+```bash
+chmod +x ./scripts/benchmark-tts-languages.sh
+./scripts/benchmark-tts-languages.sh \
+  "http://SERVER_IP:8102" \
+  "http://SERVER_IP:8100/v1/audio/speech" \
+  ./bench-tts-languages \
+  en,el,ru,es,fr,de,it,pt
+```
+
+This saves one pair per language:
+
+- `bench-tts-languages/en-speaches.wav`
+- `bench-tts-languages/en-piper.mp3`
+- `bench-tts-languages/el-speaches.wav`
+- `bench-tts-languages/el-piper.mp3`
+- `bench-tts-languages/results.csv`
+
+Use Piper as the multilingual baseline. Speaches/Kokoro is useful as a second voice stack, but it may be English-first depending on the installed model and voices.
+
+Initial LAN result on 2026-08-27 for `en,el,ru`:
+
+| Language | Speaches/Kokoro | Piper | Notes |
+| -------- | --------------- | ----- | ----- |
+| English  | 9.0s            | 6.3s  | both generated audio |
+| Greek    | 43.6s           | 7.8s  | Piper is much faster |
+| Russian  | 25.0s           | 6.8s  | Piper is much faster |
+
+Generated files were saved under a temporary Windows bench directory during the test. For repeatable portfolio notes, rerun the script on the Ubuntu host and keep `results.csv` plus a short subjective listening score.
 
 I would compare them on three axes:
 
@@ -433,7 +465,7 @@ Best lightweight methodology:
 2. Run each engine once as warmup.
 3. Run each phrase 3 times and compare median `time_total`.
 4. Listen blind to paired outputs and score from 1 to 5 for naturalness and clarity.
-5. Keep separate notes for Russian and English if you use both.
+5. Keep separate notes for each language you use.
 
 ## Step 11. Keep STT warm for OpenLingo
 
