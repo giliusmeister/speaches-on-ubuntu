@@ -435,6 +435,34 @@ Best lightweight methodology:
 4. Listen blind to paired outputs and score from 1 to 5 for naturalness and clarity.
 5. Keep separate notes for Russian and English if you use both.
 
+## Step 11. Keep STT warm for OpenLingo
+
+On a small LAN server, the slow part is often not transcription itself but loading the Whisper model after it has been idle. Speaches supports model TTL settings through environment variables, so keep the STT and VAD models resident while leaving TTS conservative unless you actively use Speaches TTS.
+
+Recommended values in `/opt/speaches-on-ubuntu/.env`:
+
+```env
+STT_MODEL_TTL=-1
+VAD_MODEL_TTL=-1
+TTS_MODEL_TTL=300
+PRELOAD_MODELS=["Systran/faster-distil-whisper-small.en","Systran/faster-whisper-small"]
+```
+
+Apply the change:
+
+```bash
+sudo systemctl restart speaches
+journalctl -u speaches -f
+```
+
+Verify startup and model availability:
+
+```bash
+curl -i "http://127.0.0.1:8101/health"
+curl -X POST "http://127.0.0.1:8101/v1/models/Systran/faster-distil-whisper-small.en"
+```
+
+Then use the OpenLingo speech diagnostics page and run `Prewarm speech models`. The first run may still be slow after a service restart, but repeated speaking exercises should avoid the large cold-start delay.
 ## LAN notes
 
 If Ubuntu firewall is enabled:
